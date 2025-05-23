@@ -1,3 +1,4 @@
+// lib/widgets/add_task_dialog.dart
 import 'package:flutter/material.dart';
 import '../models/task.dart';
 import 'package:provider/provider.dart';
@@ -6,8 +7,15 @@ import '../utils/priority_helper.dart';
 
 class AddTaskDialog extends StatefulWidget {
   final Task? initialTask;
+  final String? initialCategory;
   final void Function(Task)? onSave;
-  const AddTaskDialog({this.initialTask, this.onSave, super.key});
+
+  const AddTaskDialog({
+    this.initialTask,
+    this.initialCategory,
+    this.onSave,
+    super.key,
+  });
 
   @override
   State<AddTaskDialog> createState() => _AddTaskDialogState();
@@ -19,6 +27,7 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
   late TextEditingController _descController;
   DateTime? _selectedDate;
   Priority _priority = Priority.low;
+  late String _taskCategory; // No es _selectedCategory, es la categoría FINAL de la tarea
 
   @override
   void initState() {
@@ -27,6 +36,11 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
     _descController = TextEditingController(text: widget.initialTask?.description ?? '');
     _selectedDate = widget.initialTask?.dueDate;
     _priority = widget.initialTask?.priority ?? Priority.low;
+
+    // Si estamos editando una tarea existente, usamos su categoría.
+    // Si estamos creando una nueva tarea, usamos la initialCategory pasada desde la pestaña,
+    // o 'Personal' como fallback si no se pasó ninguna.
+    _taskCategory = widget.initialTask?.category ?? widget.initialCategory ?? 'Personal';
   }
 
   @override
@@ -36,46 +50,46 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
     super.dispose();
   }
 
+  void _pickDate() async {
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate ?? DateTime.now(),
+      firstDate: DateTime(2023),
+      lastDate: DateTime(2030),
+    );
+    if (pickedDate != null) {
+      setState(() {
+        _selectedDate = pickedDate;
+      });
+    }
+  }
+
   void _saveTask() {
     if (_formKey.currentState!.validate()) {
       final task = Task(
-        id: widget.initialTask?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-        title: _titleController.text.trim(),
+        id: widget.initialTask?.id ?? DateTime.now().toString(),
+        title: _titleController.text,
+        description: _descController.text,
         dueDate: _selectedDate,
         priority: _priority,
         isDone: widget.initialTask?.isDone ?? false,
-        description: _descController.text.trim(),
+        category: _taskCategory,
       );
 
-      if (widget.onSave != null) {
-        widget.onSave!(task);
+      final taskProv = Provider.of<TaskProvider>(context, listen: false);
+      if (widget.initialTask == null) {
+        taskProv.addTask(task);
       } else {
-        final provider = Provider.of<TaskProvider>(context, listen: false);
-        if (widget.initialTask == null) {
-          provider.addTask(task);
-        } else {
-          provider.updateTask(task);
-        }
+        taskProv.updateTask(task);
       }
+
       Navigator.of(context).pop();
     }
   }
 
-  Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate ?? DateTime.now(),
-      firstDate: DateTime.now().subtract(Duration(days: 1)),
-      lastDate: DateTime(2100),
-    );
-    if (picked != null) setState(() => _selectedDate = picked);
-  }
-
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return AlertDialog(
-      backgroundColor: theme.dialogBackgroundColor,
       title: Text(widget.initialTask == null ? 'Nueva Tarea' : 'Editar Tarea'),
       content: SingleChildScrollView(
         child: Form(
@@ -86,26 +100,32 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
               TextFormField(
                 controller: _titleController,
                 decoration: InputDecoration(labelText: 'Título'),
-                validator: (value) =>
-                    value == null || value.trim().isEmpty ? 'Ingrese un título' : null,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Por favor ingresa un título.';
+                  }
+                  return null;
+                },
               ),
-              SizedBox(height: 10),
               TextFormField(
                 controller: _descController,
-                decoration: InputDecoration(labelText: 'Descripción'),
-                minLines: 2,
-                maxLines: 4,
+                decoration: InputDecoration(labelText: 'Descripción (opcional)'),
+                maxLines: 3,
+                minLines: 1,
               ),
               SizedBox(height: 10),
               Row(
                 children: [
-                  Text("Prioridad:"),
-                  SizedBox(width: 10),
+                  Text('Prioridad:'),
+                  SizedBox(width: 8),
                   DropdownButton<Priority>(
                     value: _priority,
-                    borderRadius: BorderRadius.circular(10),
-                    onChanged: (value) {
-                      if (value != null) setState(() => _priority = value);
+                    onChanged: (newValue) {
+                      if (newValue != null) {
+                        setState(() {
+                          _priority = newValue;
+                        });
+                      }
                     },
                     items: Priority.values
                         .map((p) => DropdownMenuItem(
@@ -117,9 +137,11 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                 ],
               ),
               SizedBox(height: 10),
+              // Aquí estaba el widget para mostrar la categoría asignada, ahora eliminado.
+              // Puedes eliminar el SizedBox(height: 10) que estaba después si no hay nada más que necesite espacio.
               Row(
                 children: [
-                  Text("Fecha:"),
+                  Text("Fecha límite:"),
                   SizedBox(width: 8),
                   Expanded(
                     child: OutlinedButton(

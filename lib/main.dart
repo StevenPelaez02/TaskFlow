@@ -1,87 +1,131 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'providers/task_provider.dart';
-import 'screens/task_tab_screen.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:path_provider/path_provider.dart' as path_provider;
 
-void main() {
+import 'providers/task_provider.dart';
+import 'providers/theme_provider.dart';
+import 'screens/task_tab_screen.dart';
+import 'models/task.dart';
+import 'screens/splash_screen.dart';
+
+// Modificar main para inicializar Hive de forma asíncrona
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Hive.init solo necesita hacerse una vez y NO debe ser await si los providers lo hacen
+  // Si Hive.init necesita path_provider, entonces sí necesita await aquí.
+  final appDocumentDir = await path_provider.getApplicationDocumentsDirectory();
+  Hive.init(appDocumentDir.path);
+
+  // Registrar los adaptadores de Task y Priority. Esto es síncrono.
+  Hive.registerAdapter(PriorityAdapter());
+  Hive.registerAdapter(TaskAdapter());
+
+  // Ahora, los providers se encargarán de abrir sus respectivas cajas.
+  // El FutureBuilder en MyApp solo necesita esperar que Hive.init y los adaptadores estén listos.
+
   runApp(const MyApp());
 }
 
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
   @override
   State<MyApp> createState() => _MyAppState();
 }
 
 class _MyAppState extends State<MyApp> {
-  bool _darkMode = false;
+  // Ya no necesitamos un Future explícito para Hive.openBox aquí,
+  // ya que los proveedores lo manejan. El splash screen podría mostrarse
+  // solo por un momento mientras Hive.init se completa.
 
   @override
   Widget build(BuildContext context) {
-    // Definimos un ColorScheme con un seed color morado para el modo CLARO
-    final ColorScheme lightColorScheme = ColorScheme.fromSeed(
-      seedColor: Colors.deepPurple, // El morado base
-      brightness: Brightness.light,
-    );
+    // Si Hive.init() ya se hizo en el main, podemos quitar el FutureBuilder aquí.
+    // Pero si queremos una splash screen mientras los proveedores inicializan sus cajas,
+    // podemos usar un Future.delayed o un Future.wait en los _initHiveBox de los providers.
+    // Por simplicidad, y para mantener la splash, haremos que el FutureBuilder espere
+    // un pequeño retraso, asumiendo que los providers están cargando.
 
-    // ColorScheme para el modo OSCURO, también basado en morado
-    final ColorScheme darkColorScheme = ColorScheme.fromSeed(
-      seedColor: Colors.deepPurple, // Para mantener la base morada
-      brightness: Brightness.dark,
-    );
+    return FutureBuilder<void>(
+      // Este Future.delayed es solo para asegurar que la splash screen se vea un poco.
+      // En una app real, aquí esperarías otras inicializaciones de servicios.
+      future: Future.delayed(const Duration(milliseconds: 500)),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.done) {
+          if (snapshot.hasError) {
+            return MaterialApp(
+              home: Scaffold(
+                body: Center(
+                  child: Text('Error de inicialización: ${snapshot.error}'),
+                ),
+              ),
+            );
+          } else {
+            // Una vez que el "retraso" y Hive.init (en main) estén listos, construimos la app.
+            return MultiProvider(
+              providers: [
+                ChangeNotifierProvider(create: (_) => TaskProvider()),
+                ChangeNotifierProvider(create: (_) => ThemeProvider()),
+              ],
+              child: Consumer<ThemeProvider>(
+                builder: (context, themeProvider, child) {
+                  final ColorScheme lightColorScheme = ColorScheme.fromSeed(
+                    seedColor: Colors.deepPurple,
+                    brightness: Brightness.light,
+                  );
+                  final ColorScheme darkColorScheme = ColorScheme.fromSeed(
+                    seedColor: Colors.deepPurple,
+                    brightness: Brightness.dark,
+                  );
 
-    return ChangeNotifierProvider(
-      create: (_) => TaskProvider(),
-      child: MaterialApp(
-        title: 'TaskFlow',
-        theme: ThemeData.light().copyWith(
-          colorScheme: lightColorScheme,
-          appBarTheme: AppBarTheme(
-            backgroundColor: lightColorScheme.primary, // Color primario del tema
-            foregroundColor: lightColorScheme.onPrimary, // Color del texto/iconos (será claro sobre morado oscuro)
-          ),
-          floatingActionButtonTheme: FloatingActionButtonThemeData(
-            backgroundColor: lightColorScheme.primary,
-            foregroundColor: lightColorScheme.onPrimary,
-          ),
-          // --- TabBarTheme para el tema CLARO ---
-          tabBarTheme: TabBarThemeData(
-            labelColor: Colors.white,         // Texto de la pestaña seleccionada en blanco
-            unselectedLabelColor: Colors.white.withOpacity(0.7), // Texto de las no seleccionadas en blanco semitransparente
-            indicatorColor: Colors.white,     // Línea indicadora en blanco
-          ),
-        ),
-        darkTheme: ThemeData.dark().copyWith(
-          colorScheme: darkColorScheme,
-          appBarTheme: AppBarTheme(
-            backgroundColor: darkColorScheme.primary, // Color primario del tema oscuro
-            // CAMBIO CLAVE AQUÍ: Para que el texto sea oscuro sobre el morado oscuro de la AppBar
-            // Usamos un color que contraste adecuadamente pero que sea oscuro.
-            // darkColorScheme.primary podría ser el morado, y necesitamos un texto oscuro.
-            // Si darkColorScheme.onPrimary es blanco, lo cambiamos a un color más oscuro como Colors.black o darkColorScheme.onSurface
-            foregroundColor: Colors.black, // Color para el texto del título y el icono de menú en la AppBar
-          ),
-          floatingActionButtonTheme: FloatingActionButtonThemeData(
-            backgroundColor: darkColorScheme.primary,
-            foregroundColor: darkColorScheme.onPrimary, // Esto puede seguir siendo blanco si el FAB es oscuro y quieres el icono claro.
-          ),
-          // --- TabBarTheme para el tema OSCURO ---
-          tabBarTheme: TabBarThemeData(
-            labelColor: Colors.black,         // Texto de la pestaña seleccionada en negro
-            unselectedLabelColor: Colors.black.withOpacity(0.7), // Texto de las no seleccionadas en negro semitransparente
-            indicatorColor: Colors.black,     // Línea indicadora en negro
-          ),
-          // Puedes personalizar más colores de la interfaz de usuario aquí
-          // por ejemplo, el color de fondo general (Scaffold)
-          // scaffoldBackgroundColor: darkColorScheme.background,
-        ),
-        themeMode: _darkMode ? ThemeMode.dark : ThemeMode.light,
-        home: TaskTabScreen(
-          darkMode: _darkMode,
-          onThemeChanged: (v) => setState(() => _darkMode = v),
-        ),
-      ),
+                  return MaterialApp(
+                    title: 'TaskFlow',
+                    theme: ThemeData.light().copyWith(
+                      colorScheme: lightColorScheme,
+                      appBarTheme: AppBarTheme(
+                        backgroundColor: lightColorScheme.primary,
+                        foregroundColor: lightColorScheme.onPrimary,
+                      ),
+                      floatingActionButtonTheme: FloatingActionButtonThemeData(
+                        backgroundColor: lightColorScheme.primary,
+                        foregroundColor: lightColorScheme.onPrimary,
+                      ),
+                      tabBarTheme: TabBarThemeData(
+                        labelColor: Colors.white,
+                        unselectedLabelColor: Colors.white.withOpacity(0.7),
+                        indicatorColor: Colors.white,
+                      ),
+                    ),
+                    darkTheme: ThemeData.dark().copyWith(
+                      colorScheme: darkColorScheme,
+                      appBarTheme: AppBarTheme(
+                        backgroundColor: darkColorScheme.primary,
+                        foregroundColor: Colors.black,
+                      ),
+                      floatingActionButtonTheme: FloatingActionButtonThemeData(
+                        backgroundColor: darkColorScheme.primary,
+                        foregroundColor: darkColorScheme.onPrimary,
+                      ),
+                      tabBarTheme: TabBarThemeData(
+                        labelColor: Colors.black,
+                        unselectedLabelColor: Colors.black.withOpacity(0.7),
+                        indicatorColor: Colors.black,
+                      ),
+                    ),
+                    themeMode: themeProvider.themeMode,
+                    home: const TaskTabScreen(),
+                  );
+                },
+              ),
+            );
+          }
+        } else {
+          return const SplashScreen();
+        }
+      },
     );
   }
 }
