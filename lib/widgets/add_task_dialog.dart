@@ -1,20 +1,19 @@
 // lib/widgets/add_task_dialog.dart
 import 'package:flutter/material.dart';
-import '../models/task.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../models/task.dart';
 import '../providers/task_provider.dart';
 import '../utils/priority_helper.dart';
 
 class AddTaskDialog extends StatefulWidget {
-  final Task? initialTask;
+  final Task? taskToEdit;
   final String? initialCategory;
-  final void Function(Task)? onSave;
 
   const AddTaskDialog({
-    this.initialTask,
-    this.initialCategory,
-    this.onSave,
     super.key,
+    this.taskToEdit,
+    this.initialCategory,
   });
 
   @override
@@ -24,65 +23,80 @@ class AddTaskDialog extends StatefulWidget {
 class _AddTaskDialogState extends State<AddTaskDialog> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _titleController;
-  late TextEditingController _descController;
-  DateTime? _selectedDate;
-  Priority _priority = Priority.low;
-  late String _taskCategory; // No es _selectedCategory, es la categoría FINAL de la tarea
+  late TextEditingController _descriptionController;
+  Priority _selectedPriority = Priority.Media;
+  DateTime? _selectedDueDate;
+  String? _selectedCategory;
 
   @override
   void initState() {
     super.initState();
-    _titleController = TextEditingController(text: widget.initialTask?.title ?? '');
-    _descController = TextEditingController(text: widget.initialTask?.description ?? '');
-    _selectedDate = widget.initialTask?.dueDate;
-    _priority = widget.initialTask?.priority ?? Priority.low;
+    _titleController = TextEditingController(text: widget.taskToEdit?.title ?? '');
+    _descriptionController = TextEditingController(text: widget.taskToEdit?.description ?? '');
+    _selectedPriority = widget.taskToEdit?.priority ?? Priority.Media;
+    _selectedDueDate = widget.taskToEdit?.dueDate;
+    _selectedCategory = widget.taskToEdit?.category ?? widget.initialCategory ?? 'Personal';
 
-    // Si estamos editando una tarea existente, usamos su categoría.
-    // Si estamos creando una nueva tarea, usamos la initialCategory pasada desde la pestaña,
-    // o 'Personal' como fallback si no se pasó ninguna.
-    _taskCategory = widget.initialTask?.category ?? widget.initialCategory ?? 'Personal';
+    // Asegurarse de que la categoría inicial exista en la lista de categorías, si no, usa la primera.
+    // Esto es útil si las categorías predefinidas cambian.
+    final List<String> availableCategories = ['Personal', 'Casa', 'Trabajo', 'Estudios'];
+    if (_selectedCategory != null && !availableCategories.contains(_selectedCategory)) {
+      _selectedCategory = availableCategories.first;
+    }
   }
 
   @override
   void dispose() {
     _titleController.dispose();
-    _descController.dispose();
+    _descriptionController.dispose();
     super.dispose();
   }
 
-  void _pickDate() async {
+  void _presentDatePicker() async {
+    final now = DateTime.now();
+    final firstDate = DateTime(now.year, now.month, now.day);
     final pickedDate = await showDatePicker(
       context: context,
-      initialDate: _selectedDate ?? DateTime.now(),
-      firstDate: DateTime(2023),
-      lastDate: DateTime(2030),
+      initialDate: _selectedDueDate ?? now,
+      firstDate: firstDate,
+      lastDate: DateTime(2100),
     );
-    if (pickedDate != null) {
-      setState(() {
-        _selectedDate = pickedDate;
-      });
-    }
+    setState(() {
+      _selectedDueDate = pickedDate;
+    });
   }
 
-  void _saveTask() {
+  void _submitTask() {
     if (_formKey.currentState!.validate()) {
-      final task = Task(
-        id: widget.initialTask?.id ?? DateTime.now().toString(),
-        title: _titleController.text,
-        description: _descController.text,
-        dueDate: _selectedDate,
-        priority: _priority,
-        isDone: widget.initialTask?.isDone ?? false,
-        category: _taskCategory,
-      );
+      _formKey.currentState!.save();
 
       final taskProv = Provider.of<TaskProvider>(context, listen: false);
-      if (widget.initialTask == null) {
-        taskProv.addTask(task);
-      } else {
-        taskProv.updateTask(task);
-      }
 
+      if (widget.taskToEdit == null) {
+        final newTask = Task(
+          title: _titleController.text,
+          description: _descriptionController.text.isEmpty ? null : _descriptionController.text,
+          priority: _selectedPriority,
+          dueDate: _selectedDueDate,
+          category: _selectedCategory,
+        );
+        taskProv.addTask(newTask);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tarea añadida correctamente.')),
+        );
+      } else {
+        final updatedTask = widget.taskToEdit!.copyWith(
+          title: _titleController.text,
+          description: _descriptionController.text.isEmpty ? null : _descriptionController.text,
+          priority: _selectedPriority,
+          dueDate: _selectedDueDate,
+          category: _selectedCategory,
+        );
+        taskProv.updateTask(updatedTask);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tarea actualizada correctamente.')),
+        );
+      }
       Navigator.of(context).pop();
     }
   }
@@ -90,74 +104,81 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.initialTask == null ? 'Nueva Tarea' : 'Editar Tarea'),
-      content: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
+      title: Text(widget.taskToEdit == null ? 'Añadir Tarea' : 'Editar Tarea'),
+      content: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextFormField(
                 controller: _titleController,
-                decoration: InputDecoration(labelText: 'Título'),
+                decoration: const InputDecoration(labelText: 'Título'),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Por favor ingresa un título.';
+                    return 'Por favor, introduce un título.';
                   }
                   return null;
                 },
               ),
               TextFormField(
-                controller: _descController,
-                decoration: InputDecoration(labelText: 'Descripción (opcional)'),
+                controller: _descriptionController,
+                decoration: const InputDecoration(labelText: 'Descripción (opcional)'),
                 maxLines: 3,
-                minLines: 1,
               ),
-              SizedBox(height: 10),
+              DropdownButtonFormField<Priority>(
+                value: _selectedPriority,
+                decoration: const InputDecoration(labelText: 'Prioridad'),
+                items: Priority.values.map((Priority p) {
+                  return DropdownMenuItem(
+                    value: p,
+                    child: Text(PriorityHelper.priorityToString(p)),
+                  );
+                }).toList(),
+                onChanged: (newValue) {
+                  setState(() {
+                    _selectedPriority = newValue!;
+                  });
+                },
+              ),
+              // Aquí estaba el DropdownButtonFormField para la categoría
+              // Si quieres que no se vea, asegúrate de que este bloque no esté.
+              // Si lo quieres de vuelta, aquí está el código:
+              // DropdownButtonFormField<String>(
+              //   value: _selectedCategory,
+              //   decoration: const InputDecoration(labelText: 'Categoría'),
+              //   items: <String>['Personal', 'Casa', 'Trabajo', 'Estudios']
+              //       .map<DropdownMenuItem<String>>((String value) {
+              //     return DropdownMenuItem<String>(
+              //       value: value,
+              //       child: Text(value),
+              //     );
+              //   }).toList(),
+              //   onChanged: (String? newValue) {
+              //     setState(() {
+              //       _selectedCategory = newValue;
+              //     });
+              //   },
+              //   validator: (value) {
+              //     if (value == null || value.isEmpty) {
+              //       return 'Por favor, selecciona una categoría.';
+              //     }
+              //     return null;
+              //   },
+              // ),
               Row(
                 children: [
-                  Text('Prioridad:'),
-                  SizedBox(width: 8),
-                  DropdownButton<Priority>(
-                    value: _priority,
-                    onChanged: (newValue) {
-                      if (newValue != null) {
-                        setState(() {
-                          _priority = newValue;
-                        });
-                      }
-                    },
-                    items: Priority.values
-                        .map((p) => DropdownMenuItem(
-                              value: p,
-                              child: Text(PriorityHelper.getText(p)),
-                            ))
-                        .toList(),
-                  ),
-                ],
-              ),
-              SizedBox(height: 10),
-              // Aquí estaba el widget para mostrar la categoría asignada, ahora eliminado.
-              // Puedes eliminar el SizedBox(height: 10) que estaba después si no hay nada más que necesite espacio.
-              Row(
-                children: [
-                  Text("Fecha límite:"),
-                  SizedBox(width: 8),
                   Expanded(
-                    child: OutlinedButton(
-                      onPressed: _pickDate,
-                      child: Text(
-                        _selectedDate == null
-                            ? "Seleccionar"
-                            : "${_selectedDate!.day}/${_selectedDate!.month}/${_selectedDate!.year}",
-                      ),
+                    child: Text(
+                      _selectedDueDate == null
+                          ? 'No hay fecha seleccionada'
+                          : DateFormat('dd/MM/yyyy').format(_selectedDueDate!),
                     ),
                   ),
-                  if (_selectedDate != null)
-                    IconButton(
-                      icon: Icon(Icons.close, size: 20),
-                      onPressed: () => setState(() => _selectedDate = null),
-                    ),
+                  IconButton(
+                    onPressed: _presentDatePicker,
+                    icon: const Icon(Icons.calendar_today),
+                  ),
                 ],
               ),
             ],
@@ -166,12 +187,14 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text('Cancelar'),
+          onPressed: () {
+            Navigator.of(context).pop();
+          },
+          child: const Text('Cancelar'),
         ),
         ElevatedButton(
-          onPressed: _saveTask,
-          child: Text(widget.initialTask == null ? 'Crear' : 'Guardar'),
+          onPressed: _submitTask,
+          child: Text(widget.taskToEdit == null ? 'Añadir' : 'Guardar'),
         ),
       ],
     );

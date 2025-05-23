@@ -17,13 +17,13 @@ class TaskAdapter extends TypeAdapter<Task> {
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
     return Task(
-      id: fields[0] as String,
+      id: fields[0] as String?,
       title: fields[1] as String,
-      dueDate: fields[2] as DateTime?,
+      description: fields[2] as String?,
       priority: fields[3] as Priority,
       isDone: fields[4] as bool,
-      description: fields[5] as String,
-      category: fields[6] as String,
+      dueDate: fields[5] as DateTime?,
+      category: fields[6] as String?,
     );
   }
 
@@ -36,13 +36,13 @@ class TaskAdapter extends TypeAdapter<Task> {
       ..writeByte(1)
       ..write(obj.title)
       ..writeByte(2)
-      ..write(obj.dueDate)
+      ..write(obj.description)
       ..writeByte(3)
       ..write(obj.priority)
       ..writeByte(4)
       ..write(obj.isDone)
       ..writeByte(5)
-      ..write(obj.description)
+      ..write(obj.dueDate)
       ..writeByte(6)
       ..write(obj.category);
   }
@@ -66,26 +66,26 @@ class PriorityAdapter extends TypeAdapter<Priority> {
   Priority read(BinaryReader reader) {
     switch (reader.readByte()) {
       case 0:
-        return Priority.low;
+        return Priority.Baja;
       case 1:
-        return Priority.medium;
+        return Priority.Media;
       case 2:
-        return Priority.high;
+        return Priority.Alta;
       default:
-        return Priority.low;
+        return Priority.Baja;
     }
   }
 
   @override
   void write(BinaryWriter writer, Priority obj) {
     switch (obj) {
-      case Priority.low:
+      case Priority.Baja:
         writer.writeByte(0);
         break;
-      case Priority.medium:
+      case Priority.Media:
         writer.writeByte(1);
         break;
-      case Priority.high:
+      case Priority.Alta:
         writer.writeByte(2);
         break;
     }

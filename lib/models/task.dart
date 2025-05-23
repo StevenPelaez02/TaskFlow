@@ -1,62 +1,63 @@
 // lib/models/task.dart
 import 'package:hive/hive.dart';
+import 'package:uuid/uuid.dart';
 
-part 'task.g.dart'; // Asegúrate de que esta línea esté presente
+part 'task.g.dart'; // Asegúrate de que esta línea esté presente y sea correcta
 
-@HiveType(typeId: 0) // El typeId debe ser único para cada clase de HiveObject
+@HiveType(typeId: 0)
 enum Priority {
   @HiveField(0)
-  low,
+  Baja,
   @HiveField(1)
-  medium,
+  Media,
   @HiveField(2)
-  high,
+  Alta,
 }
 
-@HiveType(typeId: 1) // El typeId debe ser único para cada clase de HiveObject
-class Task extends HiveObject { // Asegúrate de que Task extienda HiveObject
+@HiveType(typeId: 1)
+class Task extends HiveObject {
   @HiveField(0)
   final String id;
   @HiveField(1)
-  final String title;
+  String title;
   @HiveField(2)
-  final DateTime? dueDate;
+  String? description;
   @HiveField(3)
-  final Priority priority;
+  Priority priority;
   @HiveField(4)
-  final bool isDone;
+  bool isDone;
   @HiveField(5)
-  final String description;
-  @HiveField(6) // <<-- ¡NUEVO CAMPO! Asigna un nuevo HiveField id único
-  final String category; // <<-- ¡NUEVA PROPIEDAD!
+  DateTime? dueDate;
+  @HiveField(6)
+  String? category;
 
   Task({
-    required this.id,
+    String? id,
     required this.title,
-    this.dueDate,
-    this.priority = Priority.low,
+    this.description,
+    this.priority = Priority.Media,
     this.isDone = false,
-    this.description = "",
-    this.category = "Personal", // <<-- VALOR POR DEFECTO PARA CATEGORÍA
-  });
+    this.dueDate,
+    this.category,
+  }) : id = id ?? const Uuid().v4();
 
   Task copyWith({
     String? id,
     String? title,
-    DateTime? dueDate,
+    String? description,
     Priority? priority,
     bool? isDone,
-    String? description,
-    String? category, // <<-- NUEVO CAMPO EN copyWith
+    DateTime? dueDate,
+    String? category,
   }) {
     return Task(
       id: id ?? this.id,
       title: title ?? this.title,
-      dueDate: dueDate ?? this.dueDate,
+      description: description ?? this.description,
       priority: priority ?? this.priority,
       isDone: isDone ?? this.isDone,
-      description: description ?? this.description,
-      category: category ?? this.category, // <<-- NUEVO CAMPO EN copyWith
+      dueDate: dueDate ?? this.dueDate,
+      category: category ?? this.category,
     );
   }
 }

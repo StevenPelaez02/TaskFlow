@@ -1,12 +1,15 @@
 // lib/screens/task_tab_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart'; // Importar DateFormat si se usa directamente aquí
 import '../models/task.dart';
 import '../providers/task_provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/auth_provider.dart';
 import '../widgets/add_task_dialog.dart';
-import '../widgets/task_item.dart';
-import '../widgets/app_drawer.dart';
+import '../widgets/task_item.dart'; // Asegúrate de que TaskItem esté importado
+import '../widgets/app_drawer.dart'; // Asegúrate de que AppDrawer esté importado
+import '../utils/priority_helper.dart'; // Asegúrate de que PriorityHelper esté importado
 
 class TaskTabScreen extends StatefulWidget {
   const TaskTabScreen({super.key});
@@ -18,7 +21,7 @@ class TaskTabScreen extends StatefulWidget {
 class _TaskTabScreenState extends State<TaskTabScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final List<String> _tabs = ['Todas', 'Casa', 'Trabajo', 'Estudios'];
+  final List<String> _tabs = ['Todas', 'Casa', 'Trabajo', 'Estudios', 'Personal'];
 
   @override
   void initState() {
@@ -33,24 +36,17 @@ class _TaskTabScreenState extends State<TaskTabScreen>
   }
 
   void _showAddTaskDialog() {
-    // Obtener la categoría de la pestaña actualmente seleccionada
-    // Si la pestaña es 'Todas', podemos asignarle una categoría por defecto como 'Personal'
-    // o simplemente no pasar ninguna y que el diálogo use su default.
-    // Para este caso, si es 'Todas', le asignaremos 'Personal' como categoría por defecto
-    // para la nueva tarea, ya que 'Todas' no es una categoría real para una tarea.
     final String currentTabCategory = _tabs[_tabController.index];
     final String assignedCategory = (currentTabCategory == 'Todas') ? 'Personal' : currentTabCategory;
-
 
     showDialog(
       context: context,
       builder: (ctx) => AddTaskDialog(
-        initialCategory: assignedCategory, // <<-- PASAMOS LA CATEGORÍA AQUÍ
+        initialCategory: assignedCategory,
       ),
     );
   }
 
-  // Lógica para filtrar las tareas por categoría
   List<Task> _filterTasks(List<Task> tasks, String tabCategory) {
     if (tabCategory == 'Todas') {
       return tasks;
@@ -61,6 +57,7 @@ class _TaskTabScreenState extends State<TaskTabScreen>
   @override
   Widget build(BuildContext context) {
     final taskProv = Provider.of<TaskProvider>(context);
+    final authProv = Provider.of<AuthProvider>(context, listen: false);
     final tasks = taskProv.tasks;
     final focusMode = taskProv.focusMode;
     final theme = Theme.of(context);
@@ -99,11 +96,9 @@ class _TaskTabScreenState extends State<TaskTabScreen>
         ),
       ),
       drawer: AppDrawer(
-        onLogout: () {
+        onLogout: () async {
+          await authProv.logout();
           Navigator.of(context).pop();
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Cerrar sesión (funcionalidad no implementada)')),
-          );
         },
       ),
       body: TabBarView(
@@ -118,20 +113,23 @@ class _TaskTabScreenState extends State<TaskTabScreen>
               final t = filteredTasks[index];
               final done = t.isDone;
 
-              final cardColor = done
+              // Asegurarse de que cardColor nunca sea nulo al pasarlo a TaskItem
+              final Color cardColor = done
                   ? (theme.brightness == Brightness.dark
-                  ? Colors.green[900]
-                  : Colors.green[50])
-                  : theme.cardColor;
-              final doneTextColor = (done
+                  ? (Colors.green[900] ?? Colors.green.shade800) // Proporcionar un fallback no nulo
+                  : (Colors.green[50] ?? Colors.green.shade100))
+                  : (theme.cardColor ?? Colors.white); // Proporcionar un fallback no nulo
+
+              final Color doneTextColor = (done
                   ? (theme.brightness == Brightness.dark
                   ? Colors.white.withOpacity(0.65)
-                  : Colors.green[900])
+                  : (Colors.green[900] ?? Colors.green.shade800))
                   : (theme.textTheme.bodyMedium?.color ?? Colors.black));
-              final doneSubtitleColor = (done
+
+              final Color doneSubtitleColor = (done
                   ? (theme.brightness == Brightness.dark
                   ? Colors.white54
-                  : Colors.green[900]?.withOpacity(0.7))
+                  : (Colors.green[900]?.withOpacity(0.7) ?? Colors.green.shade800.withOpacity(0.7)))
                   : (theme.textTheme.bodyMedium?.color?.withOpacity(0.7) ??
                   Colors.grey));
 
@@ -140,9 +138,9 @@ class _TaskTabScreenState extends State<TaskTabScreen>
                 child: TaskItem(
                   t: t,
                   done: done,
-                  cardColor: cardColor ?? Colors.white,
-                  doneTextColor: doneTextColor ?? Colors.green,
-                  doneSubtitleColor: doneSubtitleColor ?? Colors.green,
+                  cardColor: cardColor, // Ya es Color, no Color?
+                  doneTextColor: doneTextColor,
+                  doneSubtitleColor: doneSubtitleColor,
                 ),
               );
             },

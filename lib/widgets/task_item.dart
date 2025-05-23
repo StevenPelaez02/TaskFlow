@@ -1,12 +1,11 @@
+// lib/widgets/task_item.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
+import 'package:intl/intl.dart'; // Necesario para DateFormat
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
-
 import '../models/task.dart';
 import '../providers/task_provider.dart';
-import '../widgets/add_task_dialog.dart';
-import '../utils/priority_helper.dart';
+import '../utils/priority_helper.dart'; // Necesario para PriorityHelper
 
 class TaskItem extends StatelessWidget {
   final Task t;
@@ -26,165 +25,113 @@ class TaskItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    // Se usa listen: false porque solo se invocan métodos, no se necesita reconstruir el widget
+    final taskProv = Provider.of<TaskProvider>(context, listen: false);
 
     return Slidable(
-      key: ValueKey(t.id),
-      direction: Axis.horizontal,
-      closeOnScroll: true,
-      startActionPane: ActionPane(
-        motion: const StretchMotion(),
-        extentRatio: 0.22,
+      key: ValueKey(t.id), // Una clave única para el Slidable
+      endActionPane: ActionPane(
+        motion: const ScrollMotion(),
         children: [
-          CustomSlidableAction(
-            onPressed: (_) async {
+          SlidableAction(
+            onPressed: (ctx) async {
+              // Muestra un diálogo de confirmación antes de eliminar
               final confirm = await showDialog<bool>(
                 context: context,
                 builder: (ctx) => AlertDialog(
-                  backgroundColor: theme.cardColor,
-                  title: Text('Eliminar tarea', style: TextStyle(color: theme.textTheme.bodyMedium?.color)),
-                  content: Text('¿Seguro que deseas eliminar esta tarea?',
-                      style: TextStyle(color: theme.textTheme.bodyMedium?.color)),
+                  title: const Text('Confirmar eliminación'),
+                  content: const Text('¿Estás seguro de que quieres eliminar esta tarea?'),
                   actions: [
                     TextButton(
-                      child: Text('Cancelar', style: TextStyle(color: theme.textTheme.bodyMedium?.color)),
                       onPressed: () => Navigator.of(ctx).pop(false),
+                      child: const Text('Cancelar'),
                     ),
                     ElevatedButton(
-                      child: Text('Eliminar'),
                       onPressed: () => Navigator.of(ctx).pop(true),
-                    )
+                      child: const Text('Eliminar'),
+                    ),
                   ],
                 ),
               );
-              Slidable.of(context)?.close();
+
               if (confirm == true) {
-                Provider.of<TaskProvider>(context, listen: false).removeTask(t.id);
+                // Llama al método deleteTask del TaskProvider
+                taskProv.deleteTask(t.id); // ¡IMPORTANTE: Aquí se usa deleteTask!
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Tarea eliminada')),
+                  const SnackBar(content: Text('Tarea eliminada.')),
                 );
               }
             },
-            backgroundColor: Colors.transparent,
-            foregroundColor: Colors.red[400],
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.red[400],
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.red.withOpacity(0.2),
-                    blurRadius: 6,
-                    offset: Offset(1, 2),
-                  )
-                ],
-              ),
-              width: 44,
-              height: 44,
-              alignment: Alignment.center,
-              child: Icon(Icons.delete, color: Colors.white, size: 26),
-            ),
+            backgroundColor: Colors.red,
+            foregroundColor: Colors.white,
+            icon: Icons.delete,
+            label: 'Eliminar',
           ),
         ],
       ),
-      endActionPane: null,
-      child: GestureDetector(
-        onLongPress: () {
-          showDialog(
-            context: context,
-            builder: (ctx) => AddTaskDialog(
-              initialTask: t,
-              onSave: (editedTask) {
-                Provider.of<TaskProvider>(context, listen: false)
-                    .updateTask(editedTask);
-              },
-            ),
-          );
-        },
-        child: AnimatedContainer(
-          duration: Duration(milliseconds: 200),
-          decoration: BoxDecoration(
-            color: cardColor,
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              if (!done)
-                BoxShadow(
-                  color: theme.shadowColor.withOpacity(0.08),
-                  blurRadius: 10,
-                  offset: Offset(0, 3),
-                )
-            ],
+      child: Card(
+        color: cardColor, // Usa el color de la tarjeta proporcionado
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        child: ListTile(
+          leading: Checkbox(
+            value: t.isDone,
+            onChanged: (newValue) {
+              // Llama al método toggleTaskDone del TaskProvider
+              taskProv.toggleTaskDone(t.id); // ¡IMPORTANTE: Aquí se usa toggleTaskDone!
+            },
           ),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(
-                horizontal: 20, vertical: 12),
-            minLeadingWidth: 0,
-            leading: Container(
-              width: 13,
-              height: 13,
-              decoration: BoxDecoration(
-                color: PriorityHelper.getColor(t.priority),
-                shape: BoxShape.circle,
-              ),
-              margin: const EdgeInsets.only(right: 14),
+          title: Text(
+            t.title,
+            style: TextStyle(
+              decoration: done ? TextDecoration.lineThrough : null,
+              color: doneTextColor,
             ),
-            title: Text(
-              t.title,
-              style: TextStyle(
-                fontWeight: FontWeight.w500,
-                fontSize: 17,
-                color: doneTextColor,
-                decoration: done ? TextDecoration.lineThrough : null,
-                letterSpacing: 0.2,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (t.dueDate != null)
-                  Text(
-                    DateFormat('dd/MM/yyyy').format(t.dueDate!),
-                    style: TextStyle(
-                      color: doneSubtitleColor,
-                      fontSize: 13.5,
-                    ),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(
-                    PriorityHelper.getText(t.priority),
-                    style: TextStyle(
-                      color: PriorityHelper.getColor(t.priority),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (t.description != null && t.description!.isNotEmpty)
+                Text(
+                  t.description!,
+                  style: TextStyle(
+                    color: doneSubtitleColor,
                   ),
                 ),
-                if (t.description.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      t.description,
-                      style: TextStyle(
-                        color: doneSubtitleColor,
-                        fontSize: 13,
-                        fontStyle: FontStyle.italic,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+              if (t.category != null && t.category!.isNotEmpty)
+                Text(
+                  'Categoría: ${t.category}',
+                  style: TextStyle(
+                    color: doneSubtitleColor,
+                  ),
+                ),
+              Row(
+                children: [
+                  Text(
+                    'Prioridad: ${PriorityHelper.priorityToString(t.priority)}', // Uso de PriorityHelper
+                    style: TextStyle(
+                      color: doneSubtitleColor,
                     ),
                   ),
-              ],
-            ),
-            trailing: Checkbox(
-              value: t.isDone,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-              onChanged: (_) => Provider.of<TaskProvider>(context, listen: false).toggleTaskDone(t.id),
-              activeColor: Colors.green,
-            ),
-            onTap: () => Provider.of<TaskProvider>(context, listen: false).toggleTaskDone(t.id),
+                  const SizedBox(width: 8),
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: PriorityHelper.getColor(t.priority), // Uso de PriorityHelper
+                    ),
+                  ),
+                ],
+              ),
+              if (t.dueDate != null)
+                Text(
+                  'Fecha límite: ${DateFormat('dd/MM/yyyy').format(t.dueDate!)}',
+                  style: TextStyle(
+                    color: doneSubtitleColor,
+                  ),
+                ),
+            ],
           ),
         ),
       ),

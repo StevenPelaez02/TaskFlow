@@ -1,28 +1,44 @@
+// lib/utils/priority_helper.dart
 import 'package:flutter/material.dart';
 import '../models/task.dart';
 
 class PriorityHelper {
-  static Color getColor(Priority priority) {
+  static String priorityToString(Priority priority) {
     switch (priority) {
-      case Priority.high:
-        return Colors.red.shade600;
-      case Priority.medium:
-        return Colors.orange.shade700;
-      case Priority.low:
+      case Priority.Baja:
+        return 'Baja';
+      case Priority.Media:
+        return 'Media';
+      case Priority.Alta:
+        return 'Alta';
       default:
-        return Colors.green.shade400;
+        return 'Desconocida';
     }
   }
 
-  static String getText(Priority priority) {
-    switch (priority) {
-      case Priority.high:
-        return "Alta";
-      case Priority.medium:
-        return "Media";
-      case Priority.low:
+  static Priority stringToPriority(String priorityString) {
+    switch (priorityString) {
+      case 'Baja':
+        return Priority.Baja;
+      case 'Media':
+        return Priority.Media;
+      case 'Alta':
+        return Priority.Alta;
       default:
-        return "Baja";
+        return Priority.Baja;
+    }
+  }
+
+  static Color getColor(Priority priority) {
+    switch (priority) {
+      case Priority.Baja:
+        return Colors.blue;
+      case Priority.Media:
+        return Colors.orange;
+      case Priority.Alta:
+        return Colors.red;
+      default:
+        return Colors.grey;
     }
   }
 }
